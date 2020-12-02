@@ -1,0 +1,387 @@
+---
+title: "!Rmd_02_forecasting.Rmd"
+author: "Diego Uchendu Learning from Prof Dr Thomas Kirschstein"
+date: "01/12/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Time series demand example
+
+```{r}
+library(tidyverse)
+library(forecast)
+library(expsmooth)
+library(TTR)
+library(fpp)
+library(fpp2)
+
+```
+
+**Constant**
+
+```{r}
+len <- 100
+
+y.const <- rep(50, len) # replicates value 50 100 times
+
+
+
+x <- 1:len #1 to 100
+
+#png(file = "forecast_ts_const.png", bg = "transparent", width=600, height = 400)
+#win.metafile("forecast_ts_const.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x , y.const , type = "l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5, main= "Constant")
+#dev.off()
+
+```
+
+**TREND**
+
+```{r}
+# TREND
+
+y.trend <- 1:len*0.1 #between 0.1 to 10
+
+#png(file = "forecast_ts_trend.png", bg = "transparent", width=600, height = 400)
+#win.metafile("forecast_ts_trend.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x , y.trend , type = "l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5,main="Trend")
+#dev.off()
+```
+
+
+**Seasonality**
+
+
+```{r}
+#SEASONALITY
+
+x.seas <- 0:(len-1)%%4 + 1 # creates seasonal values. 1,2,3,4 multiple times.
+
+#drops as low as 0 and peaks as high as 6, {0,2,4,6} repeated.
+y.seas <- (x.seas-1)*2 # quarterly fluctuations
+
+#png(file = "forecast_ts_seas.png", bg = "transparent", width=600, height = 400)
+# win.metafile("forecast_ts_seas.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x , y.seas , type = "l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5, main= "Seasonality")
+#dev.off()
+
+```
+
+
+**Error**
+
+```{r}
+#ERROR
+
+y.err <- rnorm(len, 0 , 5) 
+
+# win.metafile("forecast_ts_err.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x , y.err , type = "l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5, main="Error")
+
+#dev.off()
+```
+
+**Constant + Trend + Seasonality**
+
+```{r}
+
+#png(file = "forecast_ts_all.png", bg = "transparent", width=600, height = 400)
+# win.metafile("forecast_ts_all.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x , y.const + y.trend + y.seas , type = "l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5, main = "Constant + Trend + Seasonality")
+#dev.off()
+```
+
+
+**Error + Constant + Trend + Season**
+
+```{r}
+# win.metafile("forecast_ts_all_err.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x ,y.err +  y.const + y.trend + y.seas , type = "l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5,main="Error + Constant + Trend + Season")
+#dev.off()
+```
+
+The better the forecast, the smaller is the forecasting error $\epsilon_{it}$ for material $i$ in a particular time period $t$. The forecast error determines the safety stock level. $\epsilon_{it}$ follows a stochastic process.
+
+**Time series values**
+
+```{r}
+# ts values
+y.com <- y.err +  y.const + y.trend + y.seas
+#y.com # 100 values
+
+# deltat is the fraction of the sampling period between successive observations; e.g., 1/12 for monthly data.
+# 1/4 for quarterly data
+y.com.ts <- ts(y.com, deltat = 1/4) # deltat divides the 100 values into 4 parts.
+
+y.com.ts
+```
+
+**TS decomosition by stl**
+
+seasonal, trend and irregular components using loess.
+
+```{r}
+stl.y <- stl(y.com.ts, s.window = 4)
+plot(stl.y)
+```
+
+
+**TS decomposition by decompose**
+
+decomposition of additive time series.
+
+```{r}
+decompose.y <- decompose(y.com.ts)
+plot(decompose.y)
+```
+
+**TS decomosition by lm**
+
+lm is linear models, It can be used to carry out regression, single stratum analysis of variance and analysis of covariance.
+
+x.seas <- 0:(len-1)%%4 + 1 # creates seasonal values. 1,2,3,4 multiple times.
+
+y.seas <- (x.seas-1)*2 # quarterly fluctuations
+
+**Regression Approach**
+
+* $y_t:$ demand in period $t=\{1,...,T\}$.
+* $o \in \mathbb N$ the periodicity, the season of a period $t$ is defined as $s_t \in \{1,...,o\}$.
+* $x^t=(1,...,T)$ denotes the time vector.
+* $x^s=(s_1,...,s_T)$ the seasonality vector.
+
+$$ y_t= \beta_0 + \beta_{st} + \beta_1 \cdot t + \epsilon_t$$
+
+* $o$ represents seasonality.
+* if $o=12$ means seasons in months.
+* $o=4$ seasons  Quarterly.
+* $o=30$ seasons for days in a month.
+* $o=7$ seasons for days in a week.
+
+All $\beta$ parameters are to be estimated.
+
+* $\beta_{st}$ additive seasonal effect.
+* $\beta_1$ slope parameter representing linear trend increasing or decreasing over time.
+
+We usually run test whether one of these $\beta_0, \beta_{st},\beta_1$ is significantly different from 0.
+
+* We can use T-test or do complete regression analysis, so the complete model is explaining something.
+
+* f-test look at the individual model and try to reduce that.
+
+* We can reduce that using stepwise regression technique, backward regression starting with the full model and reducing the parameter iteratively by backwards algorithm.
+
+
+```{r}
+# TS decomosition by lm
+#x.seas is seasonal ordering data 
+#x is the main data
+#y.com is time series values y.err +  y.const + y.trend + y.seas
+
+# as.factor meaning x.seas is ordered, as.factor(x.seas) indicates 4 levels
+as.factor(x.seas)
+```
+
+
+```{r}
+y.lm.decom <- lm(y.com ~ x + as.factor(x.seas) )
+y.lm.decom
+```
+
+
+
+```{r}
+summary(y.lm.decom)
+```
+
+
+
+
+```{r}
+anova(y.lm.decom)
+```
+
+
+Predicted and residual
+
+```{r}
+y.lm.pred <- predict(y.lm.decom)
+y.lm.res <- residuals(y.lm.decom)
+```
+
+# Errors
+
+**MSE**
+Mean Squared Error
+
+$\epsilon_t^2=(y_t-\hat y_t)^2$
+
+$$MSE=\frac {1}{T} \sum_{t=1}^T \epsilon^2_t$$
+
+
+```{r}
+# MSE
+sum(y.lm.res^2)/100
+```
+
+**MAD**
+
+Median absolute deviation (MAD).
+
+$|\epsilon_t|=|y_t-\hat y_t|$
+
+$$ meadian(|\epsilon|)$$
+```{r}
+median(abs(y.lm.res))
+```
+
+**Absolute percentage error**
+
+$\frac{|\epsilon_t|}{y_t}=\frac {|y_t -\hat y_t|}{y_t}$
+
+$$MAPE= \frac {1}{T} \sum_{t=1}^T \frac {|\epsilon_t|}{y_t} $$
+
+```{r}
+# MAPE
+mean(abs(y.lm.res)/y.lm.pred)
+```
+
+
+**Mean squared log accuracy ratio**
+
+$q_t=In(\frac{\hat y_t}{y_t})^2$
+
+$$\frac {1}{T} \sum_{t=1}^T q_t$$
+
+
+```{r}
+# log q
+mean(log(y.lm.pred/y.com)^2)
+```
+
+
+**function for calculating accuracy measures**
+
+```{r}
+fc.stats <- function(yhat, y){
+  y.res <- y -  yhat
+  # MSE
+  mse <- mean(y.res^2, na.rm =T)
+  # MAD
+  mad <- median(abs(y.res), na.rm =T)
+  # MAPE
+  mape <- mean(abs(y.res)/yhat, na.rm =T)
+  # log q
+  msla <- mean(log(yhat/y)^2, na.rm =T)
+  #   return
+  res <- c(mse,mad,mape,msla)
+  names(res) <- c("MSE","MAD","MAPE","MSLA")
+  return(res)
+  }
+
+# test functions
+fc.stats(yhat = y.lm.pred, y = y.com)
+```
+
+
+# Regression analysis of examplary time series  ##############################
+
+
+* $\beta_1$ is trend estimate parameter
+* $y_{t,trend}$ is the true demand value containing only the trend which is the $y.trend$
+* $\hat y_t$ estimate demand value which is  $y.lm.trend$
+* $x$ is the time/ period from 1 to 100.
+
+$$\hat y_t= \beta_1* \vec x$$
+
+
+```{r}
+#
+y.lm.trend <- coefficients(y.lm.decom)[2] * x
+
+
+#win.metafile("forecast_ts_lm_trend.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.lm.trend, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5)
+lines(x, y.trend, type="l", col="red", lwd = 1.5)
+legend("topleft", col=c("red","black"), legend = c("true model","estimate"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+$\beta_{02 is }$ ```{r} coefficients(y.lm.decom)[3]```
+
+$ y_{t,seas}= \beta_{01}, \beta_{02}, \beta_{03}, \beta_{04}$ replicated lenght of $\frac {lenght|\vec x|}{4}$ from 1 to lenght $\vec x$
+
+**Please Estimate beta01 correctly**
+
+
+```{r}
+# tail(coefficients(y.lm.decom),3) means extract the last 3 values from the y.lm.decom vector
+
+c(0,tail(coefficients(y.lm.decom),3))
+```
+
+```{r}
+lm.seas.coeff <- c(0,tail(coefficients(y.lm.decom),3))
+y.lm.seas <- rep(lm.seas.coeff, ceiling(len/4))[1:len]
+#y.lm.seas
+head(y.lm.seas)
+
+```
+
+```{r}
+#y.lm.seas <- rep(lm.seas.coeff, ceiling(len/4))[1:len]
+
+#win.metafile("forecast_ts_lm_seas.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.lm.seas, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5)
+lines(x, y.seas, type="l", col="red")
+legend("topleft", col=c("red","black"), legend = c("true model","estimate"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+**estimated(predicted) vs actual**
+
+y.com= y.err +  y.const + y.trend + y.seas
+
+
+```{r}
+#win.metafile("forecast_ts_lm_pred.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.com, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.5 , cex.lab = 2, cex.axis = 1.5)
+lines(x, y.lm.pred, type="l", col="red")
+legend("topleft", col=c("red","black"), legend = c("estimate","observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+
+**Error**
+
+y.error = actual error, thus actual variance.
+residuals(y.lm.decom)= estimated error.
+
+```{r}
+#win.metafile("forecast_ts_lm_err.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, residuals(y.lm.decom), type="h", xlab= "time/periods", ylab ="residual", lwd = 1.25 , cex.lab = 2, cex.axis = 1.5, pch =15)
+points(x-.25, y.err, type="h", col="red", lwd=1.25)
+legend("topleft", col=c("red","black"), legend = c("estimate","observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+
+
+# moving average ############################## 
+mn
