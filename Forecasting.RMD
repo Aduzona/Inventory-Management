@@ -3,8 +3,17 @@ title: "!Rmd_02_forecasting.Rmd"
 author: "Diego Uchendu Learning from Prof Dr Thomas Kirschstein"
 date: "01/12/2020"
 output:
-  pdf_document: default
-  html_document: default
+  pdf_document: 
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+    number_sections: no
+    toc: yes
+    toc_float: yes
+    code_folding: "hide"
+  word_document:
+    toc: yes
+always_allow_html: true
 ---
 
 ```{r setup, include=FALSE}
@@ -296,7 +305,7 @@ fc.stats(yhat = y.lm.pred, y = y.com)
 ```
 
 
-# Regression analysis of examplary time series  ##############################
+# Regression analysis of examplary time series
 
 
 * $\beta_1$ is trend estimate parameter
@@ -320,11 +329,11 @@ legend("topleft", col=c("red","black"), legend = c("true model","estimate"), lwd
 #dev.off()
 ```
 
-$\beta_{02 is }$ ```{r} coefficients(y.lm.decom)[3]```
+$\beta_{01}$ is 0.000000,  $\beta_{02}$ is `r coefficients(y.lm.decom)[3]` , $\beta_{03}$ is `r coefficients(y.lm.decom)[4]` , $\beta_{04}$ is `r coefficients(y.lm.decom)[5]`.
 
-$ y_{t,seas}= \beta_{01}, \beta_{02}, \beta_{03}, \beta_{04}$ replicated lenght of $\frac {lenght|\vec x|}{4}$ from 1 to lenght $\vec x$
+$y_{t,seas}= \beta_{01}, \beta_{02}, \beta_{03}, \beta_{04}$ replicated lenght of $\frac {lenght|\vec x|}{4}$ from 1 to lenght $\vec x$
 
-**Please Estimate beta01 correctly**
+
 
 
 ```{r}
@@ -382,6 +391,470 @@ legend("topleft", col=c("red","black"), legend = c("estimate","observation"), lw
 ```
 
 
+The residuals flunctuate  around zero, we also observe that the corresponding variants are equally distributed between + or - thus $E[\epsilon]\sim0$ .
 
-# moving average ############################## 
+
+# moving average
+
+$$\hat y= \sum_{\tau=t-n} ^{t-1} \frac {1}{n} \cdot y_{t-\tau} = \frac {1}{n} \cdot \sum_{\tau=t-n} ^{t-1} y_{t-\tau}$$
+```{r}
+y.com.ts
+```
+
+SMA(x, n = 10, ...) 
+
+n= Number of periods to average over.
+```{r}
+
+# SMA Calculate various moving averages (MA) of a series. SMA(x, n = 10, ...) 
+y.sma.4 <- SMA(y.com.ts, n =4)
+y.sma.4
+```
+
+calculate for the $\hat y_{4}=\frac {y_{1}+y_2+ y_3+y_4}{n}$, where n= 4.
+
+```{r}
+sum(43.53065,46.03681,55.24236,56.08508)/4
+```
+
+```{r}
+#win.metafile("forecast_ts_sma_4.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.com.ts, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.75 , cex.lab = 2, cex.axis = 1.5, pch =15)
+lines(x, c(NA, head(y.sma.4,99)), col="red", lwd=1.75)
+legend("topleft", col=c("red","black"), legend = c("esti. SMA (n=4)","observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+
+```
+
+```{r}
+fc.stats(yhat = y.sma.4, y = y.com)
+```
+
+## find best moving average parameter
+
+```{r}
+sim.sma <- function(x.n , y=y.com.ts){
+  # calculates SMA statistics for a vector of time windows x.n
+  sapply(x.n, function(x){
+    tmp <- SMA(y, n =x)
+    fc.stats(yhat = c(NA, head(tmp,99)), y = as.numeric(y))
+  })
+}
+```
+
+
+```{r}
+# Results
+x.n <- 2:20
+res.sma <- sim.sma(x.n = x.n)
+res.sma
+```
+
+**best n w.r.t. MSE**
+
+```{r}
+x.n[which.min(res.sma["MSE",])]
+```
+
+**optimal statistics**
+
+```{r}
+#gets the error values where MSE is Minimum
+
+res.sma[,which.min(res.sma["MSE",])]
+```
+
+```{r}
+# Minimum MAPE
+res.sma[,which.min(res.sma["MAPE",])]
+```
+
+```{r}
+#win.metafile("forecast_ts_sma_best.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,5))
+plot(x.n, res.sma["MSE",], type="h", xlab= expression(n), ylab ="MSE", lwd = 2 , cex.lab = 2, cex.axis = 1.5)
+par(new = TRUE)
+plot(x.n+.25, res.sma["MAPE",], type="h", col="red", lwd=2, xaxt = "n", yaxt = "n", xlab="", ylab="", xlim=c(2,20))
+axis(side = 4, cex.axis = 1.5)
+mtext("MAPE", side = 4, line = 3, cex = 2)
+legend("topright", col=c("red","black"), legend = c("MAPE","MSE"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+
+
+
+
+
+
+Finds the best time window by minimizing MSE and MAPE with the same result, that is minimum for both measures is achieved for `r x.n[which.min(res.sma["MSE",])] `  periods for MA. We are estimating contant term in MA.
+
+# 1st order exp. smoothing
+
+Exponentially decaying weights
+
+$$\hat y_t= (1-\alpha) \cdot \hat y_{t-1} + \alpha \cdot y_{t-1}$$
+
+$$ \hat y_t= \sum_{\tau=1}^{t-1} \alpha \cdot (1-\alpha)^{\tau-1} \cdot y_{t-\tau}$$
+These vales  $\alpha= 0.4$ is an arbitrary value, so no statistical method was applied in choosing it.
+
+```{r}
+y.1st.exp.smoo <- HoltWinters(y.com.ts, alpha = .4, beta = F, gamma = F)
+
+round(head(cbind(y.com, c(NA, y.1st.exp.smoo$fitted[,1])),10),2)
+
+```
+Only the first 10 values was displayed.
+
+```{r}
+#win.metafile("forecast_ts_1stem_04.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.com.ts, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.75 , cex.lab = 2, cex.axis = 1.5, pch =15)
+lines(x, c(NA, y.1st.exp.smoo$fitted[,1]), col="red", lwd=1.75)
+legend("topleft", col=c("red","black"), legend = c(expression(paste("1st ES with (", alpha==0.4,")")),"observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+```{r}
+fc.stats(yhat = c(NA, y.1st.exp.smoo$fitted[,1]), y=y.com)
+```
+
+## find best alpha 
+
+```{r}
+sim.1st.es <- function(x.alpha , y=y.com.ts){
+  # calculates 1stES statistics for a vector of alphas x.alpha
+  sapply(x.alpha, function(x){
+    tmp <- HoltWinters(y, alpha = x, beta = F, gamma = F)
+    fc.stats(yhat = c(NA, tmp$fitted[,1]), y = as.numeric(y))
+  })
+}
+# results
+x.alp <- seq(0.05,.95, length.out = 100)
+res.sim.1stes <- sim.1st.es(x.alpha = x.alp)
+res.sim.1stes
+```
+
+## optimal alphas
+
+**For MSE**
+
+```{r}
+x.alp[which.min(res.sim.1stes["MSE",])]
+```
+**For MAPE**
+
+```{r}
+x.alp[which.min(res.sim.1stes["MAPE",])]
+```
+
+## optimal accuracy measures
+
+**For MSE**
+
+```{r}
+
+res.sim.1stes[,which.min(res.sim.1stes["MSE",])]
+```
+
+**For MPE**
+```{r}
+res.sim.1stes[,which.min(res.sim.1stes["MAPE",])]
+```
+
+
+```{r}
+#win.metafile("forecast_ts_1stem_best.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,5))
+plot(x.alp, res.sim.1stes["MSE",], type="l", xlab= expression(alpha), ylab ="MSE", lwd = 2 , cex.lab = 2, cex.axis = 1.5)
+par(new = TRUE)
+plot(x.alp, res.sim.1stes["MAPE",], type="l", col="red", lwd=2, xaxt = "n", yaxt = "n", xlab="", ylab="")
+axis(side = 4, cex.axis = 1.5)
+mtext("MAPE", side = 4, line = 3, cex = 2)
+legend("topleft", col=c("red","black"), legend = c("MAPE","MSE"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+As seen in the diagram above, the best estimate for minimizing MSE $\alpha=0.240909$ 1, while that of MAPE   $\alpha=0.3863636$. 
+
+The forecasting accuracy is low, it does not account for linear trend and periodic patterns.
+
+# 2nd order exponential smoothing
+
+Used for time series with linear trends.
+
+* $a_t$ is constant estimated in period $t$.
+* $b_t$ the slope estimated in period $t$.
+
+Forecast for period $t+k$ with $k \ge 0$ is:
+$$ \hat y_{t+k}=a_{t-1}+(k+1) \cdot b_{t-1}$$
+
+**Parameter update:**
+
+Exponential smoothing is applied with smoothing parameters $\alpha$ and $\beta$ .
+
+$$ a_t= \alpha \cdot y_t(1- \alpha) \cdot (a_{t-1} + b_{t-1})$$
+
+$$ b_t= \beta \cdot (a_t - a_{t-1}) + (1-\beta) \cdot b_{t-1}$$
+
+$\alpha=0.4$ and $\beta=0.2$
+
+## function for calculating 2ndES forecasts
+
+```{r}
+
+sec.es <- function(y, alpha = .4, beta = .6, initial = c(mean(y), 0 )){
+  
+  n <- length(y)
+  res <- matrix(NA, ncol=4, nrow=n+2)
+  rownames(res) <- 0:(n+1)
+  colnames(res) <- c("y","a","b","y.hat")
+  
+  res["0", c("a","b")] <- initial
+  res[2:(n+1),"y"] <- y
+  
+  for(i in 2:(nrow(res)-1) ){
+    res[i, "y.hat"] <- res[i-1, "a"] + res[i-1, "b"]
+    res[i, "a"] <- alpha * res[i, "y"] + (1 - alpha) * res[i, "y.hat"]
+    res[i, "b"] <- beta * (res[i, "a"]-res[i-1, "a"]) + (1 - beta) * res[i-1, "b"]
+  }
+  res[n+2, "y.hat"] <- res[n+1, "a"] + res[n+1, "b"]
+  return(res)
+}
+
+y.2nd.exp.smoo <- sec.es(y.com, alpha = .4, beta = 0.2, initial = c(50,0))
+y.2nd.exp.smoo
+
+```
+
+```{r}
+fc.stats(yhat = y.2nd.exp.smoo[2:101,"y.hat"] , y = y.com)
+```
+
+alternative from stats package (initial values cannot be controlled)
+y.2nd.exp.smoo <- HoltWinters(y.com.ts, alpha = T, beta = T, gamma = F, l.start = 50, b.start = 0, start.periods = 0)
+
+## alternative from forecast package 
+
+```{r}
+y.2nd.exp.smoo <- holt(y.com.ts , h = 4 , initial = "simple")
+y.2nd.exp.smoo
+```
+
+```{r}
+y.2nd.exp.smoo$model$fitted
+```
+
+**Errors**
+
+```{r}
+fc.stats(yhat = y.2nd.exp.smoo$model$fitted , y = y.com)
+```
+
+```{r}
+#png(file = "forecast_ts_2ndem_best.png", bg = "transparent", width=600, height = 400)
+#win.metafile("forecast_ts_2ndem_best.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.com.ts, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.75 , cex.lab = 2, cex.axis = 1.5, pch =15)
+lines(x, y.2nd.exp.smoo$model$fitted, col="red", lwd=1.75)
+legend("topleft", col=c("red","black"), legend = c(expression(paste("2nd ES (", alpha==0.08,",",beta==0.18,")")),"observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+This result is worse than 1st order exponential smoothing, because it is not capturing all the elements in time series.
+
+# 3rd order exponential smoothing
+
+Here we add the seasonal effect.
+
+Starting values are needed for these parameters $a_t, b_t,c_t$.
+
+* $a_t$ is constant estimated in period $t$.
+* $b_t$ is the slope estimated in period $t$.
+* $c_t$ the seasonal offset estimated in period $t$.
+
+remember $o=$ season which can be monthly weekly, quarterly e.t.c.
+The forecast for period $t+k$ with $0\le k < o$ is:
+
+$$\hat y_{t+k}= a_{a-1}+(k+1)\cdot b_{t-1} + c_{t-o+k}$$
+
+**Parameter update**
+
+For Updating $a_t,b_t$ and $c_t$, exponential smoothing is applied with smoothing parameters $\alpha, \beta$ and $\gamma$.
+
+$$a_t= \alpha \cdot (y_t -c_{t-o}) + (1- \alpha) \cdot (a_{t-1} + b_{t-1}) $$
+
+$$ b_t= \beta \cdot (a_t - a_{t-1}) + (1+ \beta) \cdot b_{t-1}$$
+$$c_t=\gamma \cdot (y_t - a_{t-1} - b_{t-1})+ (1- \gamma) \cdot c_{t-o} $$
+## function for calculating 3rdES forecasts
+
+```{r}
+thi.es <- function(y, alpha = .4, beta = .2, gamma=.3, periods = 4, initial = list( a = mean(y), b= 0, c= rep(0,periods) )){
+  n <- length(y)
+  res <- matrix(NA, ncol=5, nrow=n+1+periods)
+  rownames(res) <- (-periods+1):(n+1)
+  colnames(res) <- c("y","a","b","c","y.hat")
+  
+  res["0", c("a","b")] <- c(initial$a, initial$b)
+  res[1:periods, "c"] <- initial$c
+  res[(periods+1):(n+periods),"y"] <- y
+  
+  for(i in (periods+1):(nrow(res)-1) ){
+    res[i, "y.hat"] <- res[i-1, "a"] + res[i-1, "b"]+ res[i-periods, "c"]
+    res[i, "a"] <- alpha * (res[i, "y"] - res[i-periods, "c"]) + (1 - alpha) * (res[i-1, "a"] + res[i-1, "b"])
+    res[i, "b"] <- beta * (res[i, "a"] - res[i-1, "a"]) + (1 - beta) * res[i-1, "b"]
+    res[i, "c"] <- gamma * (res[i, "y"] - res[i-1, "a"] - res[i-1, "b"]) + (1 - gamma) *res[i-periods, "c"]
+  }
+  res[nrow(res), "y.hat"] <- res[nrow(res)-1, "a"] + res[nrow(res)-1, "b"] + res[nrow(res)-periods, "c"]
+  return(res)
+}
+
+thi.es(y.com.ts)
+```
+note: c= 0.00 for the first 4 periods.
+
+
+
+## alternative from forecast package
+
+```{r}
+y.3rd.exp.smoo <- hw(y.com.ts , h = 1 , initial = "simple", seasonal ="additive", alpha = 0.4, beta = 0.2, gamma = 0.3)
+y.3rd.exp.smoo
+```
+
+$\hat y_t$ are as follows:
+
+```{r}
+y.3rd.exp.smoo$model$fitted
+```
+
+
+## optimal 3rd ES
+
+```{r}
+
+y.3rd.exp.smoo <- hw(y.com.ts , h = 1 , initial = "simple", seasonal ="additive")
+y.3rd.exp.smoo$model$par
+```
+in the above values,
+* $l== a_0$ that is initial constant.
+* $s_t== c_t \qquad $ e.g $s1=c_1, s2=c_2, s3=c_3, s4=c_4$ 
+
+
+```{r}
+fc.stats(yhat = y.3rd.exp.smoo$model$fitted , y = y.com)
+```
+
+```{r}
+#png(file = "forecast_ts_3rdem_best.png", bg = "transparent", width=600, height = 400)
+#win.metafile("forecast_ts_3rdem_best.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.com.ts, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.75 , cex.lab = 2, cex.axis = 1.5, pch =15)
+lines(x, y.3rd.exp.smoo$model$fitted, col="red", lwd=1.75)
+legend("topleft", col=c("red","black"), legend = c(expression(paste("3rd ES (", alpha==0.037,",",beta==0.031,",",gamma==0.089,")")),"observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+
+# best smoothing model - AICc minimization
+
+We assumed earlier that seasonal effects are additive. Additional smoothing methods: damped trends and multliplicative seasonality. 
+see slide 3b of inventory management from Prof Dr T Kirschstein "Categorization and Optimal smoothing", for more details. 
+
+In practice, we optimize the parameter of smoothing method in software suits.
+values for $\alpha$, $\beta$, $\gamma$, also initial values are important.
+
+## determine optimal ES model 
+
+Smoothing functions can be optimized for forecasting criteria like MSE, MAPE etc. Typically, however, likelihood-based measures are used like Akaike information criterion (AIC). 
+Parameters to be optimized over are the smoothing parameter (𝛼,…,𝛾) as well as the starting values (𝑎_0,𝑏_0,…).
+(T Kirschstein, 2020) slide 3b.14
+
+
+```{r}
+best.smooth <- ets(y.com.ts)
+best.smooth
+```
+
+**Error**
+
+```{r}
+fc.stats(yhat = best.smooth$fitted , y = y.com)
+```
+
+**Optimal smoothing**
+
+```{r}
+#png(file = "forecast_ts_ets_best.png", bg = "transparent", width=600, height = 400)
+#win.metafile("forecast_ts_ets_best.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.com.ts, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.75 , cex.lab = 2, cex.axis = 1.5, pch =15)
+lines(x, best.smooth$fitted, col="red", lwd=1.75)
+legend("topleft", col=c("red","black"), legend = c(expression(paste("opt. ES (", alpha==0,",",beta==0,",",gamma==0,")")),"observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+
+# Arima
+
+## Optimal arima model
+
+```{r}
+best.arima <- auto.arima(y.com.ts) 
+best.arima$fitted
+```
+
+```{r}
+best.arima$coef
+```
+
+
+```{r}
+
+fc.stats(yhat = best.arima$fitted , y = y.com)
+
+```
+
+```{r}
+checkresiduals(best.arima)
+```
+
+
+
+```{r}
+autoplot(forecast(best.arima))
+```
+
+```{r}
+#win.metafile("forecast_ts_arima_best.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.com.ts, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.75 , cex.lab = 2, cex.axis = 1.5, pch =15)
+lines(x, best.arima$fitted, col="red", lwd=1.75)
+legend("topleft", col=c("red","black"), legend = c(expression(paste("opt. ARIMA (3,1,0)",group("(",list(0,0,2),")")[4])),"observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+## optimal arima model with external regressors
+
+```{r}
+best.arimax <- auto.arima(y.com.ts, xreg = 1:100) 
+best.arimax
+```
+
+```{r}
+#win.metafile("forecast_ts_arimax_best.wmf", width=9, height = 6)
+par(family="serif", mar = c(5,5,.1,.1))
+plot(x, y.com.ts, type="l", xlab= "time/periods", ylab ="demand", lwd = 1.75 , cex.lab = 2, cex.axis = 1.5, pch =15)
+lines(x, best.arimax$fitted, col="red", lwd=1.75)
+legend("topleft", col=c("red","black"), legend = c(expression(paste("opt. ARIMA (2,0,2)",group("(",list(1,0,0),")")[4])),"observation"), lwd=c(2,2), cex=1.75, bg ="white")
+#dev.off()
+```
+
+
+```{r}
+fc.stats(yhat = best.arimax$fitted , y = y.com)
+```
+
+
 mn
